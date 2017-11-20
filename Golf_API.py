@@ -3,9 +3,7 @@ import webapp2
 import json
 import string
 
-config = {
-	
-}
+GET_ROUNDS=True
 
 class ProperName(ndb.Model):
 	first = ndb.StringProperty()
@@ -36,8 +34,10 @@ class Player(ndb.Model):
 		p_dict = {}
 		p_dict['id'] = self.id
 		p_dict['link'] = self.link
-		p_dict['name'] = self.name.first + ", " + self.name.last
-		p_dict['address'] = self.player_address.city + ", " self.player_address.state
+		p_dict['first_name'] = self.name.first
+		p_dict['last_name'] = self.name.last
+		p_dict['city'] = self.player_address.city
+		p_dict['state'] = self.player_address.state
 		if get_rounds:
 			p_dict['rounds'] = [Round.query(Round.key == key).get().to_dict() for key in self.player_rounds]
 			return p_dict
@@ -55,61 +55,153 @@ class PlayerHandler(webapp2.RequestHandler):
 			player.link = "/player/" + player_key.urlsafe()
 			player.put()
 			self.response.set_status(201)
-			self.response.write(json.dumps(player_key.get().to_dict()))
+			self.response.write(json.dumps(player_key.get().player_to_dict(GET_ROUNDS)))
 		except:
 			self.abort(400)
 
 	def get(self, id=None):
 		if id:
-			self.response.write(json.dumps(ndb.Key(urlsafe=id).get().custom_to_dict(True)))
+			self.response.write(json.dumps(ndb.Key(urlsafe=id).get().player_to_dict(GET_ROUNDS)))
 		else:
 			players = Player.query().fetch()
-			res = []
-			for p in players:
-				res.append(p.custom_to_dict(True))
+			res = [p.player_to_dict(GET_ROUNDS) for p in players]	
 			res2 = {}
 			res2['players'] = res
 			self.response.write(json.dumps(res2))
 
-	def patch(self, emp_id=None):
-		if emp_id:
-			self.response.write(json.dumps(t))
+	def patch(self, id=None):
+		if id:
+			player = ndb.Key(urlsafe=id).get()
+			changes = json.loads(self.request.body)
+			if 'first_name' in changes:
+				try:
+					player.name.first = changes['first_name']
+				except:
+					self.abort(500)
+			if 'last_name' in changes:
+				try:
+					player.name.last = changes['last_name']
+				except:
+					self.abort(500)
+			if 'city' in changes:
+				try:
+					player.player_address.city = changes['city']
+				except:
+					self.abort(500)
+			if 'state' in changes:
+				try:
+					player.player_address.state = changes['state']
+				except:
+					self.abort(500)
+			player.put()
+			self.response.set_status(200)
+			self.response.write(json.dumps(ndb.Key(urlsafe=id).get().player_to_dict(GET_ROUNDS)))
+		else:
+			self.abort(400)
 
 	def delete(self, id=None):
 		if id:
-			delete_player = ndb.Key(urlsafe=id).get().to_dict()
-			delete_rounds = delete_player['player_rounds']
-			for r in delete_rounds:
-				r.delete()
+			player = ndb.Key(urlsafe=id).get()
+			for r in player.player_rounds:
+				try:
+					r.delete()
+				except:
+					self.abort(500)
+			try:
+				ndb.Key(urlsafe=id).delete()
+			except:
+				self.abort(500)
 			self.response.set_status(200)
-			ndb.Key(urlsafe=id).delete()
+			self.response.write("Deleted Player and Associated Rounds.")
 		else:
-			self.abort(401)
+			self.abort(400)
 
 class RoundHandler(webapp2.RequestHandler):
 	def post(self, id=None):
 		if id:
-			
+			try:
+				player = ndb.Key(urlsafe=id).get()
+				round_data = json.loads(self.request.body)
+				round_key = Round(course_info=Course(name=round_data["course_name"], course_address=Address(city=round_data["course_city"], state=round_data["course_state"])), pars=round_data["pars"], scores=round_data["scores"]).put()
+				newround = round_key.get()
+				newround.id = round_key.urlsafe()
+				newround.link = "player/" + id + "/round/" + round_key.urlsafe()
+				newround.put()
+				player.player_rounds.append(round_key)
+				player.put()
+				self.response.set_status(201)
+				self.response.write(json.dumps(ndb.Key(urlsafe=id).get().player_to_dict(GET_ROUNDS)))
+			except:
+				self.abort(500)
 		else:
 			self.abort(400)
 
-	def patch(self, job_id=None):
-		if job_id:
-
-	def delete(self, id=None):
+	def get(self, id=None):
 		if id:
-			ndb.Key(urlsafe=id).delete()	
+			try:
+				self.response.write(json.dumps(ndb.Key(urlsafe=id).get().to_dict()))
+			except:
+				self.abort(500)
+		else:
+			self.abort(400)
+
+	def patch(self, p_id=None, r_id=None):
+		if p_id and r_id:
+			editround = ndb.Key(urlsafe=r_id).get()
+			changes = json.loads(self.request.body)
+			if 'course_name' in changes:
+				try:
+					editround.course_info.name = changes['course_name']
+				except:
+					self.abort(500)
+			if 'course_city' in changes:
+				try:
+					editround.course_info.course_address.city = changes['course_city']
+				except:
+					self.abort(500)
+			if 'course_state' in changes:
+				try:
+					editround.course_info.course_address.state = changes['course_state']
+				except:
+					self.abort(500)
+			if 'pars' in changes:
+				try:
+					editround.pars = changes['pars']
+				except:
+					self.abort(500)
+			if 'scores' in changes:
+				try:
+					editround.score = changes['scores']
+				except:
+					self.abort(500)
+			editround.put()
+			self.response.set_status(200)
+			self.response.write(json.dumps(ndb.Key(urlsafe=r_id).get().to_dict()))
+		else:
+			self.abort(400)
+
+	def delete(self, p_id=None, r_id=None):
+		if p_id and r_id:
+			try:
+				round_key = ndb.Key(urlsafe=r_id)
+				player = ndb.Key(urlsafe=p_id).get()
+				player.player_rounds.remove(round_key)
+				player.put()
+				round_key.delete()
+			except:
+				self.abort(500)
+			self.response.set_status(200)
+			self.response.write(str("Deleted Round"))
 		else:
 			self.abort(401)
-
 
 allowed_methods = webapp2.WSGIApplication.allowed_methods
 new_allowed_methods = allowed_methods.union(('PATCH',))
 webapp2.WSGIApplication.allowed_methods = new_allowed_methods
 app = webapp2.WSGIApplication([
 	('/player', PlayerHandler),
-	('/player/([\w-]+)/round/([\w-]+)', RoundHandler),
+	('/player/([\w-]+)', PlayerHandler),
 	('/player/([\w-]+)/round', RoundHandler),
-	('/round/([\w-]+)', PlayerHandler),
-	('/player/round', PlayerHandler)
+	('/player/([\w-]+)/round/([\w-]+)', RoundHandler),
+	('/round/([\w-]+)', RoundHandler)
 ], debug=True)
