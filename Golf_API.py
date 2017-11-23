@@ -15,12 +15,12 @@ class Address(ndb.Model):
 
 class Course(ndb.Model):
 	name = ndb.StringProperty()
-	course_address = ndb.StructuredProperty(Address)
+	address = ndb.StructuredProperty(Address)
 
 class Round(ndb.Model):
 	id = ndb.StringProperty()
 	link = ndb.StringProperty()
-	course_info = ndb.StructuredProperty(Course)
+	course = ndb.StructuredProperty(Course)
 	scores = ndb.IntegerProperty(repeated=True)
 	pars = ndb.IntegerProperty(repeated=True)
 	
@@ -28,18 +28,18 @@ class Player(ndb.Model):
 	id = ndb.StringProperty()
 	link = ndb.StringProperty()
 	name = ndb.StructuredProperty(ProperName)
-	player_address = ndb.StructuredProperty(Address)
-	player_rounds = ndb.KeyProperty(kind=Round, repeated=True)
+	address = ndb.StructuredProperty(Address)
+	rounds = ndb.KeyProperty(kind=Round, repeated=True)
 	def player_to_dict(self, get_rounds):
 		p_dict = {}
 		p_dict['id'] = self.id
 		p_dict['link'] = self.link
 		p_dict['first_name'] = self.name.first
 		p_dict['last_name'] = self.name.last
-		p_dict['city'] = self.player_address.city
-		p_dict['state'] = self.player_address.state
+		p_dict['city'] = self.address.city
+		p_dict['state'] = self.address.state
 		if get_rounds:
-			p_dict['rounds'] = [Round.query(Round.key == key).get().to_dict() for key in self.player_rounds]
+			p_dict['rounds'] = [Round.query(Round.key == key).get().to_dict() for key in self.rounds]
 			return p_dict
 		else:
 			return p_dict
@@ -49,7 +49,7 @@ class PlayerHandler(webapp2.RequestHandler):
 		try:
 			player_parent_key = ndb.Key(Player, "parent_player")
 			player_data = json.loads(self.request.body)
-			player_key = Player( name=ProperName(first=player_data['first_name'], last=player_data['last_name']), player_address=Address(city=player_data['city'], state=player_data['state']), parent=player_parent_key).put()
+			player_key = Player(name=ProperName(first=player_data['first_name'], last=player_data['last_name']), address=Address(city=player_data['city'], state=player_data['state']), parent=player_parent_key).put()
 			player = player_key.get()
 			player.id = player_key.urlsafe()
 			player.link = "/player/" + player_key.urlsafe()
@@ -85,12 +85,12 @@ class PlayerHandler(webapp2.RequestHandler):
 					self.abort(500)
 			if 'city' in changes:
 				try:
-					player.player_address.city = changes['city']
+					player.address.city = changes['city']
 				except:
 					self.abort(500)
 			if 'state' in changes:
 				try:
-					player.player_address.state = changes['state']
+					player.address.state = changes['state']
 				except:
 					self.abort(500)
 			player.put()
@@ -122,12 +122,12 @@ class RoundHandler(webapp2.RequestHandler):
 			try:
 				player = ndb.Key(urlsafe=id).get()
 				round_data = json.loads(self.request.body)
-				round_key = Round(course_info=Course(name=round_data["course_name"], course_address=Address(city=round_data["course_city"], state=round_data["course_state"])), pars=round_data["pars"], scores=round_data["scores"]).put()
+				round_key = Round(course=Course(name=round_data["course_name"], address=Address(city=round_data["course_city"], state=round_data["course_state"])), pars=round_data["pars"], scores=round_data["scores"]).put()
 				newround = round_key.get()
 				newround.id = round_key.urlsafe()
 				newround.link = "player/" + id + "/round/" + round_key.urlsafe()
 				newround.put()
-				player.player_rounds.append(round_key)
+				player.rounds.append(round_key)
 				player.put()
 				self.response.set_status(201)
 				self.response.write(json.dumps(ndb.Key(urlsafe=id).get().player_to_dict(GET_ROUNDS)))
@@ -151,17 +151,17 @@ class RoundHandler(webapp2.RequestHandler):
 			changes = json.loads(self.request.body)
 			if 'course_name' in changes:
 				try:
-					editround.course_info.name = changes['course_name']
+					editround.course.name = changes['course_name']
 				except:
 					self.abort(500)
 			if 'course_city' in changes:
 				try:
-					editround.course_info.course_address.city = changes['course_city']
+					editround.course.address.city = changes['course_city']
 				except:
 					self.abort(500)
 			if 'course_state' in changes:
 				try:
-					editround.course_info.course_address.state = changes['course_state']
+					editround.course.address.state = changes['course_state']
 				except:
 					self.abort(500)
 			if 'pars' in changes:
@@ -185,9 +185,9 @@ class RoundHandler(webapp2.RequestHandler):
 			try:
 				round_key = ndb.Key(urlsafe=r_id)
 				player = ndb.Key(urlsafe=p_id).get()
-				player.player_rounds.remove(round_key)
+				player.rounds.remove(round_key)
 				player.put()
-				round_key.delete()
+				ndb.Key(urlsafe=r_id).delete()
 			except:
 				self.abort(500)
 			self.response.set_status(200)
