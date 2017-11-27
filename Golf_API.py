@@ -69,7 +69,7 @@ class PlayerHandler(webapp2.RequestHandler):
 			res2['players'] = res
 			self.response.write(json.dumps(res2))
 
-	def patch(self, id=None):
+	def put(self, id=None):
 		if id:
 			player = ndb.Key(urlsafe=id).get()
 			changes = json.loads(self.request.body)
@@ -102,7 +102,7 @@ class PlayerHandler(webapp2.RequestHandler):
 	def delete(self, id=None):
 		if id:
 			player = ndb.Key(urlsafe=id).get()
-			for r in player.player_rounds:
+			for r in player.rounds:
 				try:
 					r.delete()
 				except:
@@ -145,7 +145,7 @@ class RoundHandler(webapp2.RequestHandler):
 		else:
 			self.abort(400)
 
-	def patch(self, p_id=None, r_id=None):
+	def put(self, p_id=None, r_id=None):
 		if p_id and r_id:
 			editround = ndb.Key(urlsafe=r_id).get()
 			changes = json.loads(self.request.body)
@@ -171,7 +171,7 @@ class RoundHandler(webapp2.RequestHandler):
 					self.abort(500)
 			if 'scores' in changes:
 				try:
-					editround.score = changes['scores']
+					editround.scores = changes['scores']
 				except:
 					self.abort(500)
 			editround.put()
